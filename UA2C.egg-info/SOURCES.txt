@@ -7,3 +7,4 @@ UA2C.egg-info/SOURCES.txt
 UA2C.egg-info/dependency_links.txt
 UA2C.egg-info/requires.txt
 UA2C.egg-info/top_level.txt
+UA2C/fonts/DejaVuSerifCondensed-Italic.ttf
