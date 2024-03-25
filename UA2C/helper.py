@@ -8,25 +8,708 @@
 
 import UA2C.routes as route
 
-import base64, csv, json, logging, pandas, shutil, threading
+import base64, csv, json, logging, mysql.connector, pandas, re, requests, shutil, threading
 
+from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
-import mysql.connector
+from deprecated import deprecated
 from random import uniform
 from os import chdir, getcwd, getenv, listdir, makedirs, path, remove, system
 from PIL import Image, ImageDraw
 from PIL.Image import Resampling
-from selenium.webdriver.support import expected_conditions as ec
 from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common import ElementClickInterceptedException, NoSuchElementException, StaleElementReferenceException, \
     TimeoutException, WebDriverException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
 from platform import system
 from time import sleep
 from telegram import Bot, error, Update
 from telegram.ext import Application, ApplicationBuilder, CallbackContext, CommandHandler, ContextTypes, filters, \
     JobQueue, InlineQueryHandler, MessageHandler, Updater
+from tqdm import tqdm
+
+
+class BearerAuth(requests.auth.AuthBase):
+    def __init__(self, token):
+        self.token = token
+
+    def __call__(self, r):
+        r.headers["authorization"] = "Bearer " + self.token
+        return r
+
+
+class Base:
+    def to_insert_statement(self, table_name):
+        columns = []
+        values = []
+
+        for attr_name, attr_value in self.__dict__.items():
+            columns.append(attr_name)
+            if isinstance(attr_value, str):
+                values.append(f'"{attr_value}"')
+            else:
+                values.append(str(attr_value))
+
+        insert_statement = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(values)});"
+        return insert_statement
+
+
+class AIModel:
+    """Para los modelos de AI de Jorge. <3"""
+    def __init__(self):
+        self.player_model = []
+
+    class Player:
+        def __init__(self, player_id, full_name, position, game_week, team, opposing_team, mixed, as_score,
+                     marca_score, mundo_deportivo_score, sofa_score, current_value, points, average, matches,
+                     goals_metadata, cards, yellow_card, double_yellow_card = 0, red_card = 0, total_passes = 0,
+                     accurate_passes = 0, total_long_balls = 0, accurate_long_balls = 0, total_cross = 0,
+                     accurate_cross = 0, total_clearance = 0, clearance_off_line = 0, aerial_lost = 0, aerial_won = 0,
+                     duel_lost = 0, duel_won = 0, challenge_lost = 0, dispossessed = 0, total_contest = 0,
+                     won_contest = 0, good_high_claim = 0, punches = 0, error_lead_to_a_shot = 0,
+                     error_lead_to_a_goal = 0, shot_off_target = 0, on_target_scoring_attempt = 0, hit_woodwork = 0,
+                     blocked_scoring_attempt = 0, outfielder_block = 0, big_chance_created = 0, big_chance_missed = 0,
+                     penalty_conceded = 0, penalty_won = 0, penalty_miss = 0, penalty_save = 0, goals = 0,
+                     own_goals = 0, saved_shots_from_inside_the_box = 0, saves = 0, goal_assist = 0, goals_against = 0,
+                     goals_avoided = 0, interception_won = 0, total_interceptions = 0, total_keeper_sweeper = 0,
+                     accurate_keeper_sweeper = 0, total_tackle = 0, was_fouled = 0, fouls = 0, total_offside = 0,
+                     minutes_played = 0, touches = 0, last_man_tackle = 0, possession_lost_control = 0,
+                     expected_goals = 0, goals_prevented = 0, key_pass = 0, expected_assists = 0,
+                     total_season_15_16 = 0, total_season_16_17 = 0, total_season_17_18 = 0, total_season_18_19 = 0,
+                     total_season_19_20 = 0, total_season_20_21 = 0, total_season_21_22 = 0, total_season_22_23 = 0,
+                     total_season_23_24 = 0, ts = 0):
+            self.player_id = player_id
+            self.full_name = full_name
+            self.position = position
+            self.game_week = game_week
+            self.team = team
+            self.opposing_team = opposing_team
+            self.mixed = mixed
+            self.as_score = as_score
+            self.marca_score = marca_score
+            self.mundo_deportivo_score = mundo_deportivo_score
+            self.sofa_score = sofa_score
+            self.current_value = current_value
+            self.points = points
+            self.average = average
+            self.matches = matches
+            self.goals_metadata = goals_metadata
+            self.cards = cards
+            self.yellow_card = yellow_card
+            self.double_yellow_card = double_yellow_card
+            self.red_card = red_card
+            self.total_passes = total_passes
+            self.accurate_passes = accurate_passes
+            self.total_long_balls = total_long_balls
+            self.accurate_long_balls = accurate_long_balls
+            self.total_cross = total_cross
+            self.accurate_cross = accurate_cross
+            self.total_clearance = total_clearance
+            self.clearance_off_line = clearance_off_line
+            self.aerial_lost = aerial_lost
+            self.aerial_won = aerial_won
+            self.duel_lost = duel_lost
+            self.duel_won = duel_won
+            self.challenge_lost = challenge_lost
+            self.dispossessed = dispossessed
+            self.total_contest = total_contest
+            self.won_contest = won_contest
+            self.good_high_claim = good_high_claim
+            self.punches = punches
+            self.error_lead_to_a_shot = error_lead_to_a_shot
+            self.error_lead_to_a_goal = error_lead_to_a_goal
+            self.shot_off_target = shot_off_target
+            self.on_target_scoring_attempt = on_target_scoring_attempt
+            self.hit_woodwork = hit_woodwork
+            self.blocked_scoring_attempt = blocked_scoring_attempt
+            self.outfielder_block = outfielder_block
+            self.big_chance_created = big_chance_created
+            self.big_chance_missed = big_chance_missed
+            self.penalty_conceded = penalty_conceded
+            self.penalty_won = penalty_won
+            self.penalty_miss = penalty_miss
+            self.penalty_save = penalty_save
+            self.goals = goals
+            self.own_goals = own_goals
+            self.saved_shots_from_inside_the_box = saved_shots_from_inside_the_box
+            self.saves = saves
+            self.goal_assist = goal_assist
+            self.goals_against = goals_against
+            self.goals_avoided = goals_avoided
+            self.interception_won = interception_won
+            self.total_interceptions = total_interceptions
+            self.total_keeper_sweeper = total_keeper_sweeper
+            self.accurate_keeper_sweeper = accurate_keeper_sweeper
+            self.total_tackle = total_tackle
+            self.was_fouled = was_fouled
+            self.fouls = fouls
+            self.total_offside = total_offside
+            self.minutes_played = minutes_played
+            self.touches = touches
+            self.last_man_tackle = last_man_tackle
+            self.possession_lost_control = possession_lost_control
+            self.expected_goals = expected_goals
+            self.goals_prevented = goals_prevented
+            self.key_pass = key_pass
+            self.expected_assists = expected_assists
+            self.total_season_15_16 = total_season_15_16
+            self.total_season_16_17 = total_season_16_17
+            self.total_season_17_18 = total_season_17_18
+            self.total_season_18_19 = total_season_18_19
+            self.total_season_19_20 = total_season_19_20
+            self.total_season_20_21 = total_season_20_21
+            self.total_season_21_22 = total_season_21_22
+            self.total_season_22_23 = total_season_22_23
+            self.total_season_23_24 = total_season_23_24
+            self.ts = ts
+
+    def add_player(self, player_id, full_name, position, game_week, team, opposing_team, mixed, as_score,
+                   marca_score, mundo_deportivo_score, sofa_score, current_value, points, average, matches,
+                   goals_metadata, cards, yellow_card, double_yellow_card = 0, red_card = 0, total_passes = 0,
+                   accurate_passes = 0, total_long_balls = 0, accurate_long_balls = 0, total_cross = 0,
+                   accurate_cross = 0, total_clearance = 0, clearance_off_line = 0, aerial_lost = 0, aerial_won = 0,
+                   duel_lost = 0, duel_won = 0, challenge_lost = 0, dispossessed = 0, total_contest = 0,
+                   won_contest = 0, good_high_claim = 0, punches = 0, error_lead_to_a_shot = 0,
+                   error_lead_to_a_goal = 0, shot_off_target = 0, on_target_scoring_attempt = 0, hit_woodwork = 0,
+                   blocked_scoring_attempt = 0, outfielder_block = 0, big_chance_created = 0, big_chance_missed = 0,
+                   penalty_conceded = 0, penalty_won = 0, penalty_miss = 0, penalty_save = 0, goals = 0, own_goals = 0,
+                   saved_shots_from_inside_the_box = 0, saves = 0, goal_assist = 0, goals_against = 0,
+                   goals_avoided = 0, interception_won = 0, total_interceptions = 0, total_keeper_sweeper = 0,
+                   accurate_keeper_sweeper = 0, total_tackle = 0, was_fouled = 0, fouls = 0, total_offside = 0,
+                   minutes_played = 0, touches = 0, last_man_tackle = 0, possession_lost_control = 0,
+                   expected_goals = 0, goals_prevented = 0, key_pass = 0, expected_assists = 0, total_season_15_16 = 0,
+                   total_season_16_17 = 0, total_season_17_18 = 0, total_season_18_19 = 0, total_season_19_20 = 0,
+                   total_season_20_21 = 0, total_season_21_22 = 0, total_season_22_23 = 0, total_season_23_24 = 0,
+                   ts = 0):
+        player = self.Player(player_id, full_name, position, game_week, team, opposing_team, mixed, as_score,
+                             marca_score, mundo_deportivo_score, sofa_score, current_value, points, average, matches,
+                             goals_metadata, cards, yellow_card, double_yellow_card, red_card, total_passes,
+                             accurate_passes, total_long_balls, accurate_long_balls, total_cross, accurate_cross,
+                             total_clearance, clearance_off_line, aerial_lost, aerial_won, duel_lost, duel_won,
+                             challenge_lost, dispossessed, total_contest, won_contest, good_high_claim, punches,
+                             error_lead_to_a_shot, error_lead_to_a_goal, shot_off_target, on_target_scoring_attempt,
+                             hit_woodwork, blocked_scoring_attempt, outfielder_block, big_chance_created,
+                             big_chance_missed, penalty_conceded, penalty_won, penalty_miss, penalty_save,
+                             goals, own_goals, saved_shots_from_inside_the_box, saves, goal_assist, goals_against,
+                             goals_avoided, interception_won, total_interceptions, total_keeper_sweeper,
+                             accurate_keeper_sweeper, total_tackle, was_fouled, fouls, total_offside, minutes_played,
+                             touches, last_man_tackle, possession_lost_control, expected_goals, goals_prevented,
+                             key_pass, expected_assists, total_season_15_16, total_season_16_17, total_season_17_18,
+                             total_season_18_19, total_season_19_20, total_season_20_21, total_season_21_22,
+                             total_season_22_23, total_season_23_24, ts)
+        self.player_model.append(player)
+
+    def save_to_csv(self, filename):
+        with open(filename, "w", newline = "") as csvfile:
+            fieldnames = vars(self.player_model[0]).keys()
+            writer = csv.DictWriter(csvfile, fieldnames = fieldnames)
+            writer.writeheader()
+            for player in self.player_model:
+                writer.writerow(vars(player))
+
+
+class Users:
+    def __init__(self):
+        self.users = []
+
+    def __getitem__(self, index):
+        return self.users[index]
+
+    class User(Base):
+        def __init__(self, id_user: int, email = "", password = "", team_name = "", team_points = 0, team_average = 0.0,
+                     team_value = 0, team_players = 0, current_balance = 0, future_balance = 0, maximum_debt = 0):
+            self.id_user = id_user
+            self.email = email
+            self.password = password
+            self.team_name = team_name
+            self.team_points = team_points
+            self.team_average = team_average
+            self.team_value = team_value
+            self.team_players = team_players
+            self.current_balance = current_balance
+            self.future_balance = future_balance
+            self.maximum_debt = maximum_debt
+
+        def to_insert_statements(self):
+            return self.to_insert_statement("league_user")
+
+    def add_user(self, id_user: int, email = "", password = "", team_name = "", team_points = 0, team_average = 0.0,
+                 team_value = 0.0, team_players = 0, current_balance = 0, future_balance = 0, maximum_debt = 0):
+        user = self.User(id_user, email, password, team_name, team_points, team_average, team_value, team_players,
+                         current_balance, future_balance, maximum_debt)
+        self.users.append(user)
+
+    def to_insert_statements(self):
+        insert_statements = []
+        for user in self.users:
+            insert_statements.extend([user.to_insert_statements()])
+        return insert_statements
+
+    def get_all_user_ids(self):
+        return [user.id_user for user in self.users]
+
+
+class Players:
+    def __init__(self):
+        self.players = []
+
+    def __getitem__(self, index):
+        return self.players[index]
+
+    class Player(Base):
+        def __init__(self, id_mundo_deportivo: int, id_sofa_score: int, id_marca: int, id_user: int, full_name: str,
+                     position: int, player_value: int, is_in_market = False, sell_price = 0.0, photo_face = "",
+                     photo_body = 0, season_15_16 = 0, season_16_17 = 0, season_17_18 = 0, season_18_19 = 0,
+                     season_19_20 = 0, season_20_21 = 0, season_21_22 = 0, season_22_23 = 0, season_23_24 = 0):
+            self.id_mundo_deportivo = id_mundo_deportivo
+            self.id_sofa_score = id_sofa_score
+            self.id_marca = id_marca
+            self.id_user = id_user
+            self.full_name = full_name
+            self.position = position
+            self.player_value = player_value
+            self.is_in_market = is_in_market
+            self.sell_price = sell_price
+            self.photo_face = photo_face
+            self.photo_body = photo_body
+            self.season_15_16 = season_15_16
+            self.season_16_17 = season_16_17
+            self.season_17_18 = season_17_18
+            self.season_18_19 = season_18_19
+            self.season_19_20 = season_19_20
+            self.season_20_21 = season_20_21
+            self.season_21_22 = season_21_22
+            self.season_22_23 = season_22_23
+            self.season_23_24 = season_23_24
+
+        def to_insert_statements(self):
+            return self.to_insert_statement("player")
+
+    def add_player(self, id_mundo_deportivo: int, id_sofa_score: int, id_marca: int, id_user: int, full_name: str,
+                   position: int, player_value: int, is_in_market = False, sell_price = 0.0, photo_face = "",
+                   photo_body = "", season_15_16 = 0, season_16_17 = 0, season_17_18 = 0, season_18_19 = 0,
+                   season_19_20 = 0, season_20_21 = 0, season_21_22 = 0, season_22_23 = 0, season_23_24 = 0):
+        player = self.Player(id_mundo_deportivo, id_sofa_score, id_marca, id_user, full_name, position, player_value,
+                             is_in_market, sell_price, photo_face, photo_body, season_15_16, season_16_17,
+                             season_17_18, season_18_19, season_19_20, season_20_21, season_21_22, season_22_23,
+                             season_23_24)
+        self.players.append(player)
+
+    def to_insert_statements(self):
+        insert_statements = []
+        for player in self.players:
+            insert_statements.extend([player.to_insert_statements()])
+        return insert_statements
+
+    def get_all_player_ids(self):
+        return [int(player.id_mundo_deportivo) for player in self.players]
+
+    def find_player(self, i: int):
+        index = 0
+        found_player = None
+        player_found = False
+
+        while index < len(self.players) and not player_found:
+            if self.players[index].id_mundo_deportivo == i:
+                found_player = self.players[index]
+                player_found = True
+            index += 1
+
+        return found_player
+
+
+class Games:
+    def __init__(self):
+        self.games = []
+
+    def __getitem__(self, index):
+        return self.games[index]
+
+    class Game(Base):
+        def __init__(self, id_gw: int, id_mundo_deportivo: int, schedule: int, game_week: int, team: int,
+                     opposing_team: int, mixed = 0, as_score = 0, marca_score = 0, mundo_deportivo_score = 0,
+                     sofa_score = 0, current_value = 0, points = 0, average = 0, matches = 0, goals_metadata = 0,
+                     cards = 0, yellow_card = 0, double_yellow_card = 0, red_card = 0, total_passes = 0,
+                     accurate_passes = 0, total_long_balls = 0, accurate_long_balls = 0, total_cross = 0,
+                     accurate_cross = 0, total_clearance = 0, clearance_off_line = 0, aerial_lost = 0, aerial_won = 0,
+                     duel_lost = 0, duel_won = 0, challenge_lost = 0, dispossessed = 0, total_contest = 0,
+                     won_contest = 0, good_high_claim = 0, punches = 0, error_lead_to_a_shot = 0,
+                     error_lead_to_a_goal = 0, shot_off_target = 0, on_target_scoring_attempt = 0, hit_woodwork = 0,
+                     blocked_scoring_attempt = 0, outfielder_block = 0, big_chance_created = 0, big_chance_missed = 0,
+                     penalty_conceded = 0, penalty_won = 0, penalty_miss = 0, penalty_save = 0, goals = 0,
+                     own_goals = 0, saved_shots_from_inside_the_box = 0, saves = 0, goal_assist = 0, goals_against = 0,
+                     goals_avoided = 0, interception_won = 0, total_interceptions = 0, total_keeper_sweeper = 0,
+                     accurate_keeper_sweeper = 0, total_tackle = 0, was_fouled = 0, fouls = 0, total_offside = 0,
+                     minutes_played = 0, touches = 0, last_man_tackle = 0, possession_lost_control = 0,
+                     expected_goals = 0, goals_prevented = 0, key_pass = 0, expected_assists = 0, ts = 0):
+            self.id_gw = id_gw
+            self.id_mundo_deportivo = id_mundo_deportivo
+            self.schedule = schedule
+            self.game_week = game_week
+            self.team = team
+            self.opposing_team = opposing_team
+            self.mixed = mixed
+            self.as_score = as_score
+            self.marca_score = marca_score
+            self.mundo_deportivo_score = mundo_deportivo_score
+            self.sofa_score = sofa_score
+            self.current_value = current_value
+            self.points = points
+            self.average = average
+            self.matches = matches
+            self.goals_metadata = goals_metadata
+            self.cards = cards
+            self.yellow_card = yellow_card
+            self.double_yellow_card = double_yellow_card
+            self.red_card = red_card
+            self.total_passes = total_passes
+            self.accurate_passes = accurate_passes
+            self.total_long_balls = total_long_balls
+            self.accurate_long_balls = accurate_long_balls
+            self.total_cross = total_cross
+            self.accurate_cross = accurate_cross
+            self.total_clearance = total_clearance
+            self.clearance_off_line = clearance_off_line
+            self.aerial_lost = aerial_lost
+            self.aerial_won = aerial_won
+            self.duel_lost = duel_lost
+            self.duel_won = duel_won
+            self.dispossessed = dispossessed
+            self.challenge_lost = challenge_lost
+            self.total_contest = total_contest
+            self.won_contest = won_contest
+            self.good_high_claim = good_high_claim
+            self.punches = punches
+            self.error_lead_to_a_shot = error_lead_to_a_shot
+            self.error_lead_to_a_goal = error_lead_to_a_goal
+            self.shot_off_target = shot_off_target
+            self.on_target_scoring_attempt = on_target_scoring_attempt
+            self.hit_woodwork = hit_woodwork
+            self.blocked_scoring_attempt = blocked_scoring_attempt
+            self.outfielder_block = outfielder_block
+            self.big_chance_created = big_chance_created
+            self.big_chance_missed = big_chance_missed
+            self.penalty_conceded = penalty_conceded
+            self.penalty_won = penalty_won
+            self.penalty_miss = penalty_miss
+            self.penalty_save = penalty_save
+            self.goals = goals
+            self.own_goals = own_goals
+            self.saved_shots_from_inside_the_box = saved_shots_from_inside_the_box
+            self.saves = saves
+            self.goal_assist = goal_assist
+            self.goals_against = goals_against
+            self.goals_avoided = goals_avoided
+            self.interception_won = interception_won
+            self.total_interceptions = total_interceptions
+            self.total_keeper_sweeper = total_keeper_sweeper
+            self.accurate_keeper_sweeper = accurate_keeper_sweeper
+            self.total_tackle = total_tackle
+            self.was_fouled = was_fouled
+            self.fouls = fouls
+            self.total_offside = total_offside
+            self.minutes_played = minutes_played
+            self.touches = touches
+            self.last_man_tackle = last_man_tackle
+            self.possession_lost_control = possession_lost_control
+            self.expected_goals = expected_goals
+            self.goals_prevented = goals_prevented
+            self.key_pass = key_pass
+            self.expected_assists = expected_assists
+            self.ts = ts
+
+        def to_insert_statements(self):
+            return self.to_insert_statement("game")
+
+    def add_game(self, id_gw: int, id_mundo_deportivo: int, schedule: int, game_week: int, team: int,
+                 opposing_team: int, mixed = 0, as_score = 0, marca_score = 0, mundo_deportivo_score = 0,
+                 sofa_score = 0, current_value = 0, points = 0, average = 0, matches = 0, goals_metadata = 0, cards = 0,
+                 yellow_card = 0, double_yellow_card = 0, red_card = 0, total_passes = 0, accurate_passes = 0,
+                 total_long_balls = 0, accurate_long_balls = 0, total_cross = 0, accurate_cross = 0, total_clearance
+                 = 0, clearance_off_line = 0, aerial_lost = 0, aerial_won = 0, duel_lost = 0, duel_won = 0,
+                 challenge_lost = 0, dispossessed = 0, total_contest = 0, won_contest = 0, good_high_claim = 0,
+                 punches = 0, error_lead_to_a_shot = 0, error_lead_to_a_goal = 0, shot_off_target = 0,
+                 on_target_scoring_attempt = 0, hit_woodwork = 0, blocked_scoring_attempt = 0, outfielder_block = 0,
+                 big_chance_created = 0, big_chance_missed = 0, penalty_conceded = 0, penalty_won = 0, penalty_miss = 0,
+                 penalty_save = 0, goals = 0, own_goals = 0, saved_shots_from_inside_the_box = 0, saves = 0,
+                 goal_assist = 0, goals_against = 0, goals_avoided = 0, interception_won = 0, total_interceptions = 0,
+                 total_keeper_sweeper = 0, accurate_keeper_sweeper = 0, total_tackle = 0, was_fouled = 0, fouls = 0,
+                 total_offside = 0, minutes_played = 0, touches = 0, last_man_tackle = 0, possession_lost_control = 0,
+                 expected_goals = 0, goals_prevented = 0, key_pass = 0, expected_assists = 0, ts = 0):
+        game = self.Game(id_gw, id_mundo_deportivo, schedule, game_week, team, opposing_team, mixed, as_score,
+                         marca_score, mundo_deportivo_score, sofa_score, current_value, points, average, matches,
+                         goals_metadata, cards, yellow_card, double_yellow_card, red_card, total_passes,
+                         accurate_passes, total_long_balls, accurate_long_balls, total_cross, accurate_cross,
+                         total_clearance, clearance_off_line, aerial_lost, aerial_won, duel_lost, duel_won,
+                         dispossessed, challenge_lost, total_contest, won_contest, good_high_claim, punches,
+                         error_lead_to_a_shot, error_lead_to_a_goal, shot_off_target, on_target_scoring_attempt,
+                         hit_woodwork, blocked_scoring_attempt, outfielder_block, big_chance_created,
+                         big_chance_missed, penalty_conceded, penalty_won, penalty_miss, penalty_save, goals,
+                         own_goals, saved_shots_from_inside_the_box, saves, goal_assist, goals_against, goals_avoided,
+                         interception_won, total_interceptions, total_keeper_sweeper, accurate_keeper_sweeper,
+                         total_tackle, was_fouled, fouls, total_offside, minutes_played, touches, last_man_tackle,
+                         possession_lost_control, expected_goals, goals_prevented, key_pass, expected_assists, ts)
+        self.games.append(game)
+
+    def to_insert_statements(self):
+        insert_statements = []
+        for game in self.games:
+            insert_statements.extend([game.to_insert_statements()])
+        return insert_statements
+
+    def get_all_games_ids(self):
+        return [game.id_gw for game in self.games]
+
+    def get_max_id(self):
+        if self.games:
+            return max(int(game.id_gw) for game in self.games) + 1
+        else:
+            return 0
+
+
+class Absences:
+    def __init__(self):
+        self.absences = []
+
+    def __getitem__(self, index):
+        return self.absences[index]
+
+    class Absence(Base):
+        def __init__(self, id_mundo_deportivo: int, type_absence: str, description_absence: str,
+                     since: datetime, until: datetime):
+            self.id_mundo_deportivo = id_mundo_deportivo
+            self.type_absence = type_absence
+            self.description_absence = description_absence
+            self.since = since
+            self.until = until
+
+        def to_insert_statements(self):
+            return self.to_insert_statement("absence")
+
+    def add_absence(self, id_mundo_deportivo: int, type_absence: str, description_absence: str,
+                    since: datetime, until: datetime):
+        absence = self.Absence(id_mundo_deportivo, type_absence, description_absence, since, until)
+        self.absences.append(absence)
+
+    def to_insert_statements(self):
+        insert_statements = []
+        for absence in self.absences:
+            insert_statements.extend([absence.to_insert_statements()])
+        return insert_statements
+
+
+class PriceVariations:
+    def __init__(self):
+        self.price_variations = []
+
+    def __getitem__(self, index):
+        return self.price_variations[index]
+
+    class PriceVariation(Base):
+        def __init__(self, id_mundo_deportivo: int, price_day: datetime, price: int, is_prediction = False):
+            self.id_mundo_deportivo = id_mundo_deportivo
+            self.price_day = price_day
+            self.price = price
+            self.is_prediction = is_prediction
+
+        def to_insert_statements(self):
+            return self.to_insert_statement("price_variation")
+
+    def add_price_variation(self, id_mundo_deportivo: int, price: int, price_day: datetime,
+                            is_prediction = False):
+        price_variation = self.PriceVariation(id_mundo_deportivo, price, price_day, is_prediction)
+        self.price_variations.append(price_variation)
+
+    def to_insert_statements(self):
+        insert_statements = []
+        for price_variation in self.price_variations:
+            insert_statements.extend([price_variation.to_insert_statements()])
+        return insert_statements
+
+
+class PredictionPoints:
+    def __init__(self):
+        self.prediction_points = []
+
+    def __getitem__(self, index):
+        return self.prediction_points[index]
+
+    class PredictionPoint(Base):
+        def __init__(self, id_mundo_deportivo: int, gameweek: int, point_prediction: int, price_prediction: int,
+                     date_prediction: datetime):
+            self.id_mundo_deportivo = id_mundo_deportivo
+            self.gameweek = gameweek
+            self.date_prediction = date_prediction
+            self.point_prediction = point_prediction
+            self.price_prediction = price_prediction
+
+        def to_insert_statements(self):
+            return self.to_insert_statement("prediction_points")
+
+    def add_prediction(self, id_mundo_deportivo: int, gameweek: int, point_prediction: int, price_prediction: int,
+                       date_prediction: datetime):
+        prediction_point = self.PredictionPoint(id_mundo_deportivo, gameweek, point_prediction, price_prediction,
+                                     date_prediction)
+        self.prediction_points.append(prediction_point)
+
+    def to_insert_statements(self):
+        insert_statements = []
+        for prediction_point in self.prediction_points:
+            insert_statements.extend([prediction_point.to_insert_statements()])
+        return insert_statements
+
+
+class UserRecommendations:
+    def __init__(self):
+        self.user_recommendations = []
+
+    def __getitem__(self, index):
+        return self.user_recommendations[index]
+
+    class UserRecommendation(Base):
+        def __init__(self, id_user: int, id_mundo_deportivo: int, recommendation_day: datetime,
+                     my_team_recommendation: bool, market_team_recommendation: bool, gameweek: int, operation_type: str,
+                     expected_value_percentage: str, expected_value_day: datetime):
+            self.id_user = id_user
+            self.id_mundo_deportivo = id_mundo_deportivo
+            self.recommendation_day = recommendation_day
+            self.my_team_recommendation = my_team_recommendation
+            self.market_team_recommendation = market_team_recommendation
+            self.gameweek = gameweek
+            self.operation_type = operation_type
+            self.expected_value_percentage = expected_value_percentage
+            self.expected_value_day = expected_value_day
+
+        def to_insert_statements(self):
+            return self.to_insert_statement("user_recommendation")
+
+    def add_recommendation(self, id_user: int, id_mundo_deportivo: int, recommendation_day: datetime,
+                           my_team_recommendation: bool, market_team_recommendation: bool, gameweek: int,
+                           operation_type: str, expected_value_percentage: str, expected_value_day: datetime):
+        user_recommendation = self.UserRecommendation(id_user, id_mundo_deportivo, recommendation_day,
+                                                      my_team_recommendation, market_team_recommendation, gameweek,
+                                                      operation_type, expected_value_percentage, expected_value_day)
+        self.user_recommendations.append(user_recommendation)
+
+    def to_insert_statements(self):
+        insert_statements = []
+        for user_recommendation in self.user_recommendations:
+            insert_statements.extend([user_recommendation.to_insert_statements()])
+        return insert_statements
+
+
+class GlobalRecommendations:
+    def __init__(self):
+        self.global_recommendations = []
+
+    def __getitem__(self, index):
+        return self.global_recommendations[index]
+
+    class GlobalRecommendation(Base):
+        def __init__(self, id_mundo_deportivo: int, lineup:int, gameweek: int):
+            self.id_mundo_deportivo = id_mundo_deportivo
+            self.lineup = lineup
+            self.gameweek = gameweek
+
+        def to_insert_statements(self):
+            return self.to_insert_statement("global_recommendation")
+
+    def add_recommendation(self, id_mundo_deportivo: int, lineup:int, gameweek: int):
+        user_recommendation = self.GlobalRecommendation(id_mundo_deportivo, lineup, gameweek)
+        self.global_recommendations.append(user_recommendation)
+
+    def to_insert_statements(self):
+        insert_statements = []
+        for global_recommendation in self.global_recommendations:
+            insert_statements.extend([global_recommendation.to_insert_statements()])
+        return insert_statements
+
+
+@deprecated(action = "ignore")
+class PlayerGames:
+    def __init__(self):
+        self.player_games = []
+
+    def __getitem__(self, index):
+        return self.player_games[index]
+
+    class PlayerGame(Base):
+        def __init__(self, id_play, id_mundo_deportivo, id_game):
+            self.id_play = id_play
+            self.id_mundo_deportivo = id_mundo_deportivo
+            self.id_game = id_game
+
+        def to_insert_statements(self):
+            return self.to_insert_statement("player_game")
+
+    def add_player_game(self, id_play, id_mundo_deportivo, id_game):
+        player_game = self.PlayerGame(id_play, id_mundo_deportivo, id_game)
+        self.player_games.append(player_game)
+
+    def to_insert_statements(self):
+        insert_statements = []
+        for player_game in self.player_games:
+            insert_statements.extend([player_game.to_insert_statements()])
+        return insert_statements
+
+
+@deprecated(action = "ignore")
+class Movements:
+    def __init__(self):
+        self.movements = []
+
+    def __getitem__(self, index):
+        return self.movements[index]
+
+    class Movement(Base):
+        def __init__(self, from_name, to_name, type_movement, day, price):
+            self.id_movement = None  # Este atributo se autoincrementará en la base de datos
+            self.from_name = from_name
+            self.to_name = to_name
+            self.type_movement = type_movement
+            self.day = day
+            self.price = price
+
+        def to_insert_statements(self):
+            return self.to_insert_statement("movement")
+
+    def add_movement(self, from_name, to_name, type_movement, day, price):
+        movement = self.Movement(from_name, to_name, type_movement, day, price)
+        self.movements.append(movement)
+
+    def to_insert_statements(self):
+        insert_statements = []
+        for movement in self.movements:
+            insert_statements.extend([movement.to_insert_statements()])
+        return insert_statements
+
+
+@deprecated(action = "ignore")
+class PlayerMovements:
+    def __init__(self):
+        self.player_movements = []
+
+    def __getitem__(self, index):
+        return self.player_movements[index]
+
+    class PlayerMovement(Base):
+        def __init__(self):
+            self.player_movement = set()
+
+        def to_insert_statements(self):
+            return self.to_insert_statement("player_movement")
+
+    def add_player_movement(self):
+        player_movement = self.PlayerMovement()
+        self.player_movements.append(player_movement)
+
+    def to_insert_statements(self):
+        insert_statements = []
+        for player_movement in self.player_movements:
+            insert_statements.extend([player_movement.to_insert_statements()])
+        return insert_statements
 
 
 # For debugging, this sets up a formatting for a logfile, and where it is.
@@ -441,11 +1124,11 @@ def scrape_backup(folder, backup):
 
 # Database
 def create_database_connection():
-    if system() != "Linux":
-        host = getenv("DB_HOST", "localhost")
+    if system() == "Windows":
+        host = getenv("DB_HOST", "127.0.0.1")
         port = getenv("DB_PORT", "3306")
         user = getenv("DB_USER", "root")
-        password = getenv("DB_PASSWORD", "uem.ua2c19789!")
+        password = getenv("DB_PASSWORD", )
         database = getenv("DB_NAME", "pc2")
     else:
         host = getenv("DB_HOST", "db")
