@@ -2,6 +2,10 @@
 
 This README outlines the steps necessary to install the UA2C library, a Python package designed to streamline your coding workflow. Follow these instructions to correctly install the library and start using its features.
 
+### How to uninstall the library: 
+```
+python3 -m pip uninstall ua2c
+```
 ## How to Install the Library
 
 ### Step 1: Unzip the Downloaded File
