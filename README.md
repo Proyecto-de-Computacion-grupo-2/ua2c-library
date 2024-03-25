@@ -17,14 +17,14 @@ First, you need to unzip the downloaded file containing the UA2C library. Place 
 3. **Build the Distribution Wheel**:
     - Run the following command:
       ```
-      python setup.py bdist_wheel
+      python3 setup.py bdist_wheel
       ```
       Note: Depending on your system's configuration, you may need to use `python3` instead of `python`.
 
 4. **Install the Package**:
     - Once the wheel file is created, install the UA2C library using pip with the command below:
       ```
-      python -m pip install dist/UA2C-0.2-py3-none-any.whl
+      python3 -m pip install dist/UA2C-0.2-py3-none-any.whl
       ```
       Ensure the wheel file name (`UA2C-0.2-py3-none-any.whl` in this case) matches the one generated in your `dist` folder.
 

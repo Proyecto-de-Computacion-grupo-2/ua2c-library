@@ -441,11 +441,11 @@ def scrape_backup(folder, backup):
 
 # Database
 def create_database_connection():
-    if system() == "Windows":
-        host = getenv("DB_HOST", "127.0.0.1")
+    if system() != "Linux":
+        host = getenv("DB_HOST", "localhost")
         port = getenv("DB_PORT", "3306")
         user = getenv("DB_USER", "root")
-        password = getenv("DB_PASSWORD", )
+        password = getenv("DB_PASSWORD", "uem.ua2c19789!")
         database = getenv("DB_NAME", "pc2")
     else:
         host = getenv("DB_HOST", "db")
