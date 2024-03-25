@@ -1130,8 +1130,14 @@ def create_database_connection():
         user = getenv("DB_USER", "root")
         password = getenv("DB_PASSWORD", )
         database = getenv("DB_NAME", "pc2")
-    else:
+    elif system() == "Linux":
         host = getenv("DB_HOST", "db")
+        port = getenv("DB_PORT", "3306")
+        user = getenv("DB_USER", "root")
+        password = getenv("DB_PASSWORD", "uem.ua2c19789!")
+        database = getenv("DB_NAME", "pc2")
+    else:
+        host = getenv("DB_HOST", "localhost")
         port = getenv("DB_PORT", "3306")
         user = getenv("DB_USER", "root")
         password = getenv("DB_PASSWORD", "uem.ua2c19789!")
