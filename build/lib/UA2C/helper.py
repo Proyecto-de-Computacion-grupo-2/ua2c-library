@@ -8,11 +8,16 @@
 
 import UA2C.routes as route
 
-import base64, csv, json, logging, mysql.connector, pandas, re, requests, shutil, threading
+import base64, csv, itertools, json, logging, matplotlib.pyplot as plt, mysql.connector, numpy, pandas, platform, \
+    re, requests, shutil, tensorflow, threading, warnings
 
 from bs4 import BeautifulSoup
+from collections import Counter
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from deprecated import deprecated
+from math import sqrt
+from matplotlib import ticker
 from random import uniform
 from os import chdir, getcwd, getenv, listdir, makedirs, path, remove, system
 from PIL import Image, ImageDraw
@@ -23,12 +28,15 @@ from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common import ElementClickInterceptedException, NoSuchElementException, StaleElementReferenceException, \
     TimeoutException, WebDriverException
-from platform import system
-from time import sleep
+from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import StandardScaler
+from statsmodels.tsa.arima.model import ARIMA
 from telegram import Bot, error, Update
 from telegram.ext import Application, ApplicationBuilder, CallbackContext, CommandHandler, ContextTypes, filters, \
     JobQueue, InlineQueryHandler, MessageHandler, Updater
+from time import sleep
 from tqdm import tqdm
+from transformers import TFBertModel, BertTokenizer
 
 
 class BearerAuth(requests.auth.AuthBase):
@@ -38,6 +46,22 @@ class BearerAuth(requests.auth.AuthBase):
     def __call__(self, r):
         r.headers["authorization"] = "Bearer " + self.token
         return r
+
+
+class Finder:
+    def find_object_by_id(self, objects_list, id_to_find, id_attribute):
+        found_object = None
+        index = 0
+        object_found = False
+
+        while index < len(objects_list) and not object_found:
+            obj = objects_list[index]
+            if getattr(obj, id_attribute) == id_to_find:
+                found_object = obj
+                object_found = True
+            index += 1
+
+        return found_object
 
 
 class Base:
@@ -54,6 +78,19 @@ class Base:
 
         insert_statement = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(values)});"
         return insert_statement
+
+    def to_update_statement(self, table_name, condition):
+        updates = []
+
+        for attr_name, attr_value in self.__dict__.items():
+            if attr_name != "id":  # Evita actualizar la clave primaria (suponiendo que "id" es la clave primaria)
+                if isinstance(attr_value, str):
+                    updates.append(f"{attr_name} = '{attr_value}'")
+                else:
+                    updates.append(f"{attr_name} = {attr_value}")
+
+        update_statement = f"UPDATE {table_name} SET {', '.join(updates)} WHERE {condition};"
+        return update_statement
 
 
 class AIModel:
@@ -210,7 +247,7 @@ class AIModel:
                 writer.writerow(vars(player))
 
 
-class Users:
+class Users(Finder):
     def __init__(self):
         self.users = []
 
@@ -235,6 +272,28 @@ class Users:
         def to_insert_statements(self):
             return self.to_insert_statement("league_user")
 
+    def fill_from_database(self):
+        connection = None
+        cursor = None
+        try:
+            connection = create_database_connection()
+            if connection.is_connected():
+                cursor = connection.cursor()
+                query = "SELECT * FROM league_user;"
+                cursor.execute(query)
+                records = cursor.fetchall()
+                for row in records:
+                    (id_user, email, password, team_name, team_points, team_average, team_value, team_players,
+                     current_balance, future_balance, maximum_debt) = row
+                    self.add_user(id_user, email, password, team_name, team_points, team_average, team_value,
+                                  team_players, current_balance, future_balance, maximum_debt)
+        except Exception as e:
+            print("Error while connecting to MySQL", e)
+        finally:
+            if connection.is_connected():
+                cursor.close()
+                connection.close()
+
     def add_user(self, id_user: int, email = "", password = "", team_name = "", team_points = 0, team_average = 0.0,
                  team_value = 0.0, team_players = 0, current_balance = 0, future_balance = 0, maximum_debt = 0):
         user = self.User(id_user, email, password, team_name, team_points, team_average, team_value, team_players,
@@ -250,8 +309,11 @@ class Users:
     def get_all_user_ids(self):
         return [user.id_user for user in self.users]
 
+    def find_user(self, user_id):
+        return self.find_object_by_id(self.users, user_id, "id_user")
 
-class Players:
+
+class Players(Finder):
     def __init__(self):
         self.players = []
 
@@ -260,8 +322,8 @@ class Players:
 
     class Player(Base):
         def __init__(self, id_mundo_deportivo: int, id_sofa_score: int, id_marca: int, id_user: int, full_name: str,
-                     position: int, player_value: int, is_in_market = False, sell_price = 0.0, photo_face = "",
-                     photo_body = 0, season_15_16 = 0, season_16_17 = 0, season_17_18 = 0, season_18_19 = 0,
+                     position: int, player_value: int, is_in_market = False, sell_price = 0.0, photo_body = 0,
+                     photo_face = 0, season_15_16 = 0, season_16_17 = 0, season_17_18 = 0, season_18_19 = 0,
                      season_19_20 = 0, season_20_21 = 0, season_21_22 = 0, season_22_23 = 0, season_23_24 = 0):
             self.id_mundo_deportivo = id_mundo_deportivo
             self.id_sofa_score = id_sofa_score
@@ -272,8 +334,8 @@ class Players:
             self.player_value = player_value
             self.is_in_market = is_in_market
             self.sell_price = sell_price
-            self.photo_face = photo_face
             self.photo_body = photo_body
+            self.photo_face = photo_face
             self.season_15_16 = season_15_16
             self.season_16_17 = season_16_17
             self.season_17_18 = season_17_18
@@ -287,14 +349,38 @@ class Players:
         def to_insert_statements(self):
             return self.to_insert_statement("player")
 
+    def fill_from_database(self):
+        connection = None
+        cursor = None
+        try:
+            connection = create_database_connection()
+            if connection.is_connected():
+                cursor = connection.cursor()
+                query = "SELECT * FROM player;"
+                cursor.execute(query)
+                records = cursor.fetchall()
+                for row in records:
+                    (id_mundo_deportivo, id_sofa_score, id_marca, id_user, full_name, position, player_value,
+                     is_in_market, sell_price, photo_body, photo_face, season_15_16, season_16_17, season_17_18,
+                     season_18_19, season_19_20, season_20_21, season_21_22, season_22_23, season_23_24) = row
+                    self.add_player(id_mundo_deportivo, id_sofa_score, id_marca, id_user, full_name, position,
+                                    player_value, is_in_market, sell_price, photo_body, photo_face, season_15_16,
+                                    season_16_17, season_17_18, season_18_19, season_19_20, season_20_21, season_21_22,
+                                    season_22_23, season_23_24)
+        except Exception as e:
+            print("Error while connecting to MySQL", e)
+        finally:
+            if connection.is_connected():
+                cursor.close()
+                connection.close()
+
     def add_player(self, id_mundo_deportivo: int, id_sofa_score: int, id_marca: int, id_user: int, full_name: str,
-                   position: int, player_value: int, is_in_market = False, sell_price = 0.0, photo_face = "",
-                   photo_body = "", season_15_16 = 0, season_16_17 = 0, season_17_18 = 0, season_18_19 = 0,
+                   position: int, player_value: int, is_in_market = False, sell_price = 0.0, photo_body = "",
+                   photo_face = "", season_15_16 = 0, season_16_17 = 0, season_17_18 = 0, season_18_19 = 0,
                    season_19_20 = 0, season_20_21 = 0, season_21_22 = 0, season_22_23 = 0, season_23_24 = 0):
         player = self.Player(id_mundo_deportivo, id_sofa_score, id_marca, id_user, full_name, position, player_value,
-                             is_in_market, sell_price, photo_face, photo_body, season_15_16, season_16_17,
-                             season_17_18, season_18_19, season_19_20, season_20_21, season_21_22, season_22_23,
-                             season_23_24)
+                             is_in_market, sell_price, photo_body, photo_face, season_15_16, season_16_17, season_17_18,
+                             season_18_19, season_19_20, season_20_21, season_21_22, season_22_23, season_23_24)
         self.players.append(player)
 
     def to_insert_statements(self):
@@ -306,18 +392,17 @@ class Players:
     def get_all_player_ids(self):
         return [int(player.id_mundo_deportivo) for player in self.players]
 
-    def find_player(self, i: int):
-        index = 0
-        found_player = None
-        player_found = False
+    def find_player(self, player_id):
+        return self.find_object_by_id(self.players, player_id, "id_mundo_deportivo")
 
-        while index < len(self.players) and not player_found:
-            if self.players[index].id_mundo_deportivo == i:
-                found_player = self.players[index]
-                player_found = True
-            index += 1
+    def find_unmatched_players(self):
+        unmatched_players = []
 
-        return found_player
+        for player in self.players:
+            if player.id_marca == 0:
+                unmatched_players.append(player.full_name)
+
+        return unmatched_players
 
 
 class Games:
@@ -423,6 +508,52 @@ class Games:
         def to_insert_statements(self):
             return self.to_insert_statement("game")
 
+    def fill_from_database(self):
+        connection = None
+        cursor = None
+        try:
+            connection = create_database_connection()
+            if connection.is_connected():
+                cursor = connection.cursor()
+                query = "SELECT * FROM game;"
+                cursor.execute(query)
+                records = cursor.fetchall()
+                for row in records:
+                    row = row[1:]
+                    (id_gw, id_mundo_deportivo, schedule, game_week, team, opposing_team, mixed, as_score, marca_score,
+                     mundo_deportivo_score, sofa_score, current_value, points, average, matches, goals_metadata, cards,
+                     yellow_card, double_yellow_card, red_card, total_passes, accurate_passes, total_long_balls,
+                     accurate_long_balls, total_cross, accurate_cross, total_clearance, clearance_off_line, aerial_lost,
+                     aerial_won, duel_lost, duel_won, challenge_lost, dispossessed, total_contest, won_contest,
+                     good_high_claim, punches, error_lead_to_a_shot, error_lead_to_a_goal, shot_off_target,
+                     on_target_scoring_attempt, hit_woodwork, blocked_scoring_attempt, outfielder_block,
+                     big_chance_created, big_chance_missed, penalty_conceded, penalty_won, penalty_miss,
+                     penalty_save, goals, own_goals, saved_shots_from_inside_the_box, saves, goal_assist,
+                     goals_against, goals_avoided, interception_won, total_interceptions, total_keeper_sweeper,
+                     accurate_keeper_sweeper, total_tackle, was_fouled, fouls, total_offside, minutes_played, touches,
+                     last_man_tackle, possession_lost_control, expected_goals, goals_prevented, key_pass,
+                     expected_assists, ts) = row
+                    self.add_game(id_gw, id_mundo_deportivo, schedule, game_week, team, opposing_team, mixed, as_score,
+                                  marca_score, mundo_deportivo_score, sofa_score, current_value, points, average,
+                                  matches, goals_metadata, cards, yellow_card, double_yellow_card, red_card,
+                                  total_passes, accurate_passes, total_long_balls, accurate_long_balls, total_cross,
+                                  accurate_cross, total_clearance, clearance_off_line, aerial_lost, aerial_won,
+                                  duel_lost, duel_won, dispossessed, challenge_lost, total_contest, won_contest,
+                                  good_high_claim, punches, error_lead_to_a_shot, error_lead_to_a_goal, shot_off_target,
+                                  on_target_scoring_attempt, hit_woodwork, blocked_scoring_attempt, outfielder_block,
+                                  big_chance_created, big_chance_missed, penalty_conceded, penalty_won, penalty_miss,
+                                  penalty_save, goals, own_goals, saved_shots_from_inside_the_box, saves, goal_assist,
+                                  goals_against, goals_avoided, interception_won, total_interceptions,
+                                  total_keeper_sweeper, accurate_keeper_sweeper, total_tackle, was_fouled, fouls,
+                                  total_offside, minutes_played, touches, last_man_tackle, possession_lost_control,
+                                  expected_goals, goals_prevented, key_pass, expected_assists, ts)
+        except Exception as e:
+            print("Error while connecting to MySQL", e)
+        finally:
+            if connection.is_connected():
+                cursor.close()
+                connection.close()
+
     def add_game(self, id_gw: int, id_mundo_deportivo: int, schedule: int, game_week: int, team: int,
                  opposing_team: int, mixed = 0, as_score = 0, marca_score = 0, mundo_deportivo_score = 0,
                  sofa_score = 0, current_value = 0, points = 0, average = 0, matches = 0, goals_metadata = 0, cards = 0,
@@ -488,6 +619,27 @@ class Absences:
         def to_insert_statements(self):
             return self.to_insert_statement("absence")
 
+    def fill_from_database(self):
+        connection = None
+        cursor = None
+        try:
+            connection = create_database_connection()
+            if connection.is_connected():
+                cursor = connection.cursor()
+                query = "SELECT * FROM absence;"
+                cursor.execute(query)
+                records = cursor.fetchall()
+                for row in records:
+                    row = row[1:]
+                    (id_mundo_deportivo, type_absence, description_absence, since, until) = row
+                    self.add_absence(id_mundo_deportivo, type_absence, description_absence, since, until)
+        except Exception as e:
+            print("Error while connecting to MySQL", e)
+        finally:
+            if connection.is_connected():
+                cursor.close()
+                connection.close()
+
     def add_absence(self, id_mundo_deportivo: int, type_absence: str, description_absence: str,
                     since: datetime, until: datetime):
         absence = self.Absence(id_mundo_deportivo, type_absence, description_absence, since, until)
@@ -516,6 +668,27 @@ class PriceVariations:
 
         def to_insert_statements(self):
             return self.to_insert_statement("price_variation")
+
+    def fill_from_database(self):
+        connection = None
+        cursor = None
+        try:
+            connection = create_database_connection()
+            if connection.is_connected():
+                cursor = connection.cursor()
+                query = "SELECT * FROM price_variation;"
+                cursor.execute(query)
+                records = cursor.fetchall()
+                for row in records:
+                    row = row[1:]
+                    (id_mundo_deportivo, price, price_day, is_prediction) = row
+                    self.add_price_variation(id_mundo_deportivo, price, price_day, is_prediction)
+        except Exception as e:
+            print("Error while connecting to MySQL", e)
+        finally:
+            if connection.is_connected():
+                cursor.close()
+                connection.close()
 
     def add_price_variation(self, id_mundo_deportivo: int, price: int, price_day: datetime,
                             is_prediction = False):
@@ -547,6 +720,28 @@ class PredictionPoints:
 
         def to_insert_statements(self):
             return self.to_insert_statement("prediction_points")
+
+    def fill_from_database(self):
+        connection = None
+        cursor = None
+        try:
+            connection = create_database_connection()
+            if connection.is_connected():
+                cursor = connection.cursor()
+                query = "SELECT * FROM prediction_points;"
+                cursor.execute(query)
+                records = cursor.fetchall()
+                for row in records:
+                    row = row[1:]
+                    (id_mundo_deportivo, gameweek, point_prediction, price_prediction, date_prediction) = row
+                    self.add_prediction(id_mundo_deportivo, gameweek, point_prediction, price_prediction,
+                                        date_prediction)
+        except Exception as e:
+            print("Error while connecting to MySQL", e)
+        finally:
+            if connection.is_connected():
+                cursor.close()
+                connection.close()
 
     def add_prediction(self, id_mundo_deportivo: int, gameweek: int, point_prediction: int, price_prediction: int,
                        date_prediction: datetime):
@@ -585,6 +780,31 @@ class UserRecommendations:
         def to_insert_statements(self):
             return self.to_insert_statement("user_recommendation")
 
+    def fill_from_database(self):
+        connection = None
+        cursor = None
+        try:
+            connection = create_database_connection()
+            if connection.is_connected():
+                cursor = connection.cursor()
+                query = "SELECT * FROM user_recommendation"
+                cursor.execute(query)
+                records = cursor.fetchall()
+                for row in records:
+                    row = row[1:]
+                    (id_user, id_mundo_deportivo, recommendation_day, my_team_recommendation,
+                     market_team_recommendation, gameweek, operation_type, expected_value_percentage,
+                     expected_value_day) = row
+                    self.add_recommendation(id_user, id_mundo_deportivo, recommendation_day, my_team_recommendation,
+                                            market_team_recommendation, gameweek, operation_type,
+                                            expected_value_percentage, expected_value_day)
+        except Exception as e:
+            print("Error while connecting to MySQL", e)
+        finally:
+            if connection.is_connected():
+                cursor.close()
+                connection.close()
+
     def add_recommendation(self, id_user: int, id_mundo_deportivo: int, recommendation_day: datetime,
                            my_team_recommendation: bool, market_team_recommendation: bool, gameweek: int,
                            operation_type: str, expected_value_percentage: str, expected_value_day: datetime):
@@ -615,6 +835,27 @@ class GlobalRecommendations:
 
         def to_insert_statements(self):
             return self.to_insert_statement("global_recommendation")
+
+    def fill_from_database(self):
+        connection = None
+        cursor = None
+        try:
+            connection = create_database_connection()
+            if connection.is_connected():
+                cursor = connection.cursor()
+                query = "SELECT * FROM global_recommendation;"
+                cursor.execute(query)
+                records = cursor.fetchall()
+                for row in records:
+                    row = row[1:]
+                    (id_mundo_deportivo, lineup, gameweek) = row
+                    self.add_recommendation(id_mundo_deportivo, lineup, gameweek)
+        except Exception as e:
+            print("Error while connecting to MySQL", e)
+        finally:
+            if connection.is_connected():
+                cursor.close()
+                connection.close()
 
     def add_recommendation(self, id_mundo_deportivo: int, lineup:int, gameweek: int):
         user_recommendation = self.GlobalRecommendation(id_mundo_deportivo, lineup, gameweek)
@@ -917,7 +1158,8 @@ def fix_format():
             copy_bak(route.players_market_temp_info_file, route.players_market_temp_info_file_bak)
             write_to_csv(route.players_market_info_file, ["ID", "Name", "Value", "Date"], aux, "w")
         except IndexError as err:
-            #logger.exception(err)
+            if any(platform.system() == ext for ext in ["Linux", "Windows"]):
+                logger.exception(err)
             pass
 
 
@@ -1049,11 +1291,13 @@ def login_fantasy_mundo_deportivo():
             driver.get("https://mister.mundodeportivo.com/new-onboarding/auth/email")
             navigation_to = False
         except TimeoutException as err:
-            #logger.exception(err)
+            if any(platform.system() == ext for ext in ["Linux", "Windows"]):
+                logger.exception(err)
             sleep(2)
             pass
         except WebDriverException as err:
-            #logger.exception(err)
+            if any(platform.system() == ext for ext in ["Linux", "Windows"]):
+                logger.exception(err)
             sleep(2)
             pass
 
@@ -1109,7 +1353,8 @@ def scrape_backup(folder, backup):
             except FileNotFoundError as err:
                 backup_size, original_size = -1, -1
                 print(f"El archivo original '{original_path}' no existe.")
-                #logger.exception(err)
+                if any(platform.system() == ext for ext in ["Linux", "Windows"]):
+                    logger.exception(err)
             try:
                 if 0 < original_size > backup_size:
                     shutil.copy(original_path, back_path)
@@ -1117,20 +1362,21 @@ def scrape_backup(folder, backup):
                     shutil.copy(back_path, original_path)
             except shutil.Error as err:
                 print(f"Error al copiar archivos: {err}")
-                #logger.exception(err)
+                if any(platform.system() == ext for ext in ["Linux", "Windows"]):
+                    logger.exception(err)
         else:
             shutil.copy(original_path, back_path)
 
 
 # Database
 def create_database_connection():
-    if system() == "Windows":
+    if platform.system() == "Windows":
         host = getenv("DB_HOST", "127.0.0.1")
         port = getenv("DB_PORT", "3306")
         user = getenv("DB_USER", "root")
         password = getenv("DB_PASSWORD", )
         database = getenv("DB_NAME", "pc2")
-    elif system() == "Linux":
+    elif platform.system() == "Linux":
         host = getenv("DB_HOST", "db")
         port = getenv("DB_PORT", "3306")
         user = getenv("DB_USER", "root")
@@ -1298,4 +1544,5 @@ def close_database_connection(conn):
         conn.close()
 
 
-#logger = define_logger(route.helper_log)
+if any(platform.system() == ext for ext in ["Linux", "Windows"]):
+    logger = define_logger(route.helper_log)

@@ -2,10 +2,12 @@ from setuptools import setup, find_packages
 
 setup(
     name = "UA2C",
-    version = "0.2",
+    version = "0.8",
     packages = find_packages(),
-    install_requires = ["matplotlib", "numpy", "pandas", "scikit-learn", "statsmodels", "mysql-connector-python",
-                        "Pillow", "selenium", "python-telegram-bot"],
+    install_requires = ["beautifulsoup4", "deprecated", "matplotlib", "mysql-connector-python", "numpy", "pandas",
+                        "Pillow", "python-telegram-bot","requests", "scikit-learn", "selenium", "statsmodels",
+                        "tensorflow", "tf-keras", "transformers", "tqdm"
+        ],
     package_data = {"UA2C": ["fonts/DejaVuSerifCondensed-Italic.ttf"]},
     author = "Lekker",
     author_email = "NoneType@NotCallable.com",
