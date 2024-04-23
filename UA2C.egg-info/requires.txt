@@ -10,7 +10,7 @@ requests
 scikit-learn
 selenium
 statsmodels
-tensorflow
+tensorflow==2.16.1
 tf-keras
 transformers
 tqdm

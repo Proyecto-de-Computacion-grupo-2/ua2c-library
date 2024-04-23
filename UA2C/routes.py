@@ -81,32 +81,35 @@ merge_my_team_ss = path.join(files_folder, "future_my_team_ss")
 
 git_lock = Lock()
 
+# API folders.
+env_file = path.join(scrape_folder, ".env")
+
 # Bot folders.
-JSON_FILE = path.join(bot_folder, "jobfile.json")
-bot_log = path.join(bot_folder, "bot.log")
-background_path = path.join(image_folder, "background.png")
-index_current_path = path.join(image_folder, "index_current")
-current_path = path.join(image_folder, "current")
+# JSON_FILE = path.join(bot_folder, "jobfile.json")
+# bot_log = path.join(bot_folder, "bot.log")
+# background_path = path.join(image_folder, "background.png")
+# index_current_path = path.join(image_folder, "index_current")
+# current_path = path.join(image_folder, "current")
 # font = ImageFont.truetype(path.join(utils_folder, "DejaVuSerifCondensed-Italic.ttf"), 70)
 # font_market = ImageFont.truetype(path.join(utils_folder, "DejaVuSerifCondensed-Italic.ttf"), 18)
-current_alignment = path.join(files_folder, "current_alignment")
-current_alignment_bak = path.join(backup_folder, "current_alignment_bak")
-merge_market_md_bak = path.join(files_folder, "future_market_md_bak")
-merge_my_team_md_bak = path.join(files_folder, "future_my_team_md_bak")
-merge_market_ss_bak = path.join(files_folder, "future_market_ss_bak")
-merge_my_team_ss_bak = path.join(files_folder, "future_my_team_ss_bak")
-market = path.join(players_folder, "fantasy-players-in-market.csv")
-market_players = path.join(image_folder, "market_players.jpeg")
-market_bak = path.join(backup_folder, "fantasy-players-in-market_bot.csv_bak")
+# current_alignment = path.join(files_folder, "current_alignment")
+# current_alignment_bak = path.join(backup_folder, "current_alignment_bak")
+# merge_market_md_bak = path.join(files_folder, "future_market_md_bak")
+# merge_my_team_md_bak = path.join(files_folder, "future_my_team_md_bak")
+# merge_market_ss_bak = path.join(files_folder, "future_market_ss_bak")
+# merge_my_team_ss_bak = path.join(files_folder, "future_my_team_ss_bak")
+# market = path.join(players_folder, "fantasy-players-in-market.csv")
+# market_players = path.join(image_folder, "market_players.jpeg")
+# market_bak = path.join(backup_folder, "fantasy-players-in-market_bot.csv_bak")
 
 # Application folders.
-fantasy_logo = path.join(image_folder, "mister-fantasy-md-logo_mod.png")
-football_loading = path.join(image_folder, "football_loading.gif")
-app_personal_team_file = "fantasy-personal-team-data.csv"
-app_personal_lineup_file = "personal_lineup"
-app_personal_market_file = "fantasy-market-data.csv"
-market_md_img = path.join(image_folder, "future_market_md")
-my_team_md_img = path.join(image_folder, "future_my_team_md")
-market_ss_img = path.join(image_folder, "future_market_ss")
-my_team_ss_img = path.join(image_folder, "future_my_team_ss")
-font_popup = (path.join(utils_folder, "../DejaVuSerifCondensed-Italic.ttf"), 18)
+# fantasy_logo = path.join(image_folder, "mister-fantasy-md-logo_mod.png")
+# football_loading = path.join(image_folder, "football_loading.gif")
+# app_personal_team_file = "fantasy-personal-team-data.csv"
+# app_personal_lineup_file = "personal_lineup"
+# app_personal_market_file = "fantasy-market-data.csv"
+# market_md_img = path.join(image_folder, "future_market_md")
+# my_team_md_img = path.join(image_folder, "future_my_team_md")
+# market_ss_img = path.join(image_folder, "future_market_ss")
+# my_team_ss_img = path.join(image_folder, "future_my_team_ss")
+# font_popup = (path.join(utils_folder, "../DejaVuSerifCondensed-Italic.ttf"), 18)

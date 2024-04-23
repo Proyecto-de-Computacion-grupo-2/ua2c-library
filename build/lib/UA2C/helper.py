@@ -256,7 +256,8 @@ class Users(Finder):
 
     class User(Base):
         def __init__(self, id_user: int, email = "", password = "", team_name = "", team_points = 0, team_average = 0.0,
-                     team_value = 0, team_players = 0, current_balance = 0, future_balance = 0, maximum_debt = 0):
+                     team_value = 0, team_players = 0, current_balance = 0, future_balance = 0, maximum_debt = 0,
+                     active = False):
             self.id_user = id_user
             self.email = email
             self.password = password
@@ -268,6 +269,7 @@ class Users(Finder):
             self.current_balance = current_balance
             self.future_balance = future_balance
             self.maximum_debt = maximum_debt
+            self.active = active
 
         def to_insert_statements(self):
             return self.to_insert_statement("league_user")
@@ -282,11 +284,14 @@ class Users(Finder):
                 query = "SELECT * FROM league_user;"
                 cursor.execute(query)
                 records = cursor.fetchall()
+                progress_bar = tqdm(total = len(records), desc = "Filling League User: ")
                 for row in records:
                     (id_user, email, password, team_name, team_points, team_average, team_value, team_players,
                      current_balance, future_balance, maximum_debt) = row
                     self.add_user(id_user, email, password, team_name, team_points, team_average, team_value,
-                                  team_players, current_balance, future_balance, maximum_debt)
+                                  team_players, current_balance, future_balance, maximum_debt, active)
+                    progress_bar.update(1)
+                progress_bar.close()
         except Exception as e:
             print("Error while connecting to MySQL", e)
         finally:
@@ -295,9 +300,10 @@ class Users(Finder):
                 connection.close()
 
     def add_user(self, id_user: int, email = "", password = "", team_name = "", team_points = 0, team_average = 0.0,
-                 team_value = 0.0, team_players = 0, current_balance = 0, future_balance = 0, maximum_debt = 0):
+                 team_value = 0.0, team_players = 0, current_balance = 0, future_balance = 0, maximum_debt = 0,
+                 active = False):
         user = self.User(id_user, email, password, team_name, team_points, team_average, team_value, team_players,
-                         current_balance, future_balance, maximum_debt)
+                         current_balance, future_balance, maximum_debt, active)
         self.users.append(user)
 
     def to_insert_statements(self):
@@ -359,6 +365,7 @@ class Players(Finder):
                 query = "SELECT * FROM player;"
                 cursor.execute(query)
                 records = cursor.fetchall()
+                progress_bar = tqdm(total = len(records), desc = "Filling Player: ")
                 for row in records:
                     (id_mundo_deportivo, id_sofa_score, id_marca, id_user, full_name, position, player_value,
                      is_in_market, sell_price, photo_body, photo_face, season_15_16, season_16_17, season_17_18,
@@ -367,6 +374,8 @@ class Players(Finder):
                                     player_value, is_in_market, sell_price, photo_body, photo_face, season_15_16,
                                     season_16_17, season_17_18, season_18_19, season_19_20, season_20_21, season_21_22,
                                     season_22_23, season_23_24)
+                    progress_bar.update(1)
+                progress_bar.close()
         except Exception as e:
             print("Error while connecting to MySQL", e)
         finally:
@@ -413,8 +422,8 @@ class Games:
         return self.games[index]
 
     class Game(Base):
-        def __init__(self, id_gw: int, id_mundo_deportivo: int, schedule: int, game_week: int, team: int,
-                     opposing_team: int, mixed = 0, as_score = 0, marca_score = 0, mundo_deportivo_score = 0,
+        def __init__(self, id_gw: int, id_mundo_deportivo: int, schedule: int, game_week: int, team: str,
+                     opposing_team: str, mixed = 0, as_score = 0, marca_score = 0, mundo_deportivo_score = 0,
                      sofa_score = 0, current_value = 0, points = 0, average = 0, matches = 0, goals_metadata = 0,
                      cards = 0, yellow_card = 0, double_yellow_card = 0, red_card = 0, total_passes = 0,
                      accurate_passes = 0, total_long_balls = 0, accurate_long_balls = 0, total_cross = 0,
@@ -518,6 +527,7 @@ class Games:
                 query = "SELECT * FROM game;"
                 cursor.execute(query)
                 records = cursor.fetchall()
+                progress_bar = tqdm(total = len(records), desc = "Filling Game: ")
                 for row in records:
                     row = row[1:]
                     (id_gw, id_mundo_deportivo, schedule, game_week, team, opposing_team, mixed, as_score, marca_score,
@@ -547,6 +557,8 @@ class Games:
                                   total_keeper_sweeper, accurate_keeper_sweeper, total_tackle, was_fouled, fouls,
                                   total_offside, minutes_played, touches, last_man_tackle, possession_lost_control,
                                   expected_goals, goals_prevented, key_pass, expected_assists, ts)
+                    progress_bar.update(1)
+                progress_bar.close()
         except Exception as e:
             print("Error while connecting to MySQL", e)
         finally:
@@ -554,8 +566,8 @@ class Games:
                 cursor.close()
                 connection.close()
 
-    def add_game(self, id_gw: int, id_mundo_deportivo: int, schedule: int, game_week: int, team: int,
-                 opposing_team: int, mixed = 0, as_score = 0, marca_score = 0, mundo_deportivo_score = 0,
+    def add_game(self, id_gw: int, id_mundo_deportivo: int, schedule: int, game_week: int, team: str,
+                 opposing_team: str, mixed = 0, as_score = 0, marca_score = 0, mundo_deportivo_score = 0,
                  sofa_score = 0, current_value = 0, points = 0, average = 0, matches = 0, goals_metadata = 0, cards = 0,
                  yellow_card = 0, double_yellow_card = 0, red_card = 0, total_passes = 0, accurate_passes = 0,
                  total_long_balls = 0, accurate_long_balls = 0, total_cross = 0, accurate_cross = 0, total_clearance
@@ -629,10 +641,13 @@ class Absences:
                 query = "SELECT * FROM absence;"
                 cursor.execute(query)
                 records = cursor.fetchall()
+                progress_bar = tqdm(total = len(records), desc = "Filling Absence: ")
                 for row in records:
                     row = row[1:]
                     (id_mundo_deportivo, type_absence, description_absence, since, until) = row
                     self.add_absence(id_mundo_deportivo, type_absence, description_absence, since, until)
+                    progress_bar.update(1)
+                progress_bar.close()
         except Exception as e:
             print("Error while connecting to MySQL", e)
         finally:
@@ -679,10 +694,13 @@ class PriceVariations:
                 query = "SELECT * FROM price_variation;"
                 cursor.execute(query)
                 records = cursor.fetchall()
+                progress_bar = tqdm(total = len(records), desc = "Filling Price Variation: ")
                 for row in records:
                     row = row[1:]
                     (id_mundo_deportivo, price, price_day, is_prediction) = row
                     self.add_price_variation(id_mundo_deportivo, price, price_day, is_prediction)
+                    progress_bar.update(1)
+                progress_bar.close()
         except Exception as e:
             print("Error while connecting to MySQL", e)
         finally:
@@ -731,11 +749,14 @@ class PredictionPoints:
                 query = "SELECT * FROM prediction_points;"
                 cursor.execute(query)
                 records = cursor.fetchall()
+                progress_bar = tqdm(total = len(records), desc = "Filling Prediction Points: ")
                 for row in records:
                     row = row[1:]
                     (id_mundo_deportivo, gameweek, point_prediction, price_prediction, date_prediction) = row
                     self.add_prediction(id_mundo_deportivo, gameweek, point_prediction, price_prediction,
                                         date_prediction)
+                    progress_bar.update(1)
+                progress_bar.close()
         except Exception as e:
             print("Error while connecting to MySQL", e)
         finally:
@@ -790,6 +811,7 @@ class UserRecommendations:
                 query = "SELECT * FROM user_recommendation"
                 cursor.execute(query)
                 records = cursor.fetchall()
+                progress_bar = tqdm(total = len(records), desc = "Filling User Recommendation: ")
                 for row in records:
                     row = row[1:]
                     (id_user, id_mundo_deportivo, recommendation_day, my_team_recommendation,
@@ -798,6 +820,8 @@ class UserRecommendations:
                     self.add_recommendation(id_user, id_mundo_deportivo, recommendation_day, my_team_recommendation,
                                             market_team_recommendation, gameweek, operation_type,
                                             expected_value_percentage, expected_value_day)
+                    progress_bar.update(1)
+                progress_bar.close()
         except Exception as e:
             print("Error while connecting to MySQL", e)
         finally:
@@ -846,10 +870,13 @@ class GlobalRecommendations:
                 query = "SELECT * FROM global_recommendation;"
                 cursor.execute(query)
                 records = cursor.fetchall()
+                progress_bar = tqdm(total = len(records), desc = "Filling Global Recommendation: ")
                 for row in records:
                     row = row[1:]
                     (id_mundo_deportivo, lineup, gameweek) = row
                     self.add_recommendation(id_mundo_deportivo, lineup, gameweek)
+                    progress_bar.update(1)
+                progress_bar.close()
         except Exception as e:
             print("Error while connecting to MySQL", e)
         finally:
@@ -1370,23 +1397,18 @@ def scrape_backup(folder, backup):
 
 # Database
 def create_database_connection():
+    with open(route.env_file, "r", encoding = "utf-8") as f:
+        data = json.load(f)
+    host = data["DB_HOST"]
+    port = data["DB_PORT"]
+    user = data["DB_USERNAME"]
+    password = data["DB_PASSWORD"]
+    database = data["DB_DATABASE"]
     if platform.system() == "Windows":
         host = getenv("DB_HOST", "127.0.0.1")
         port = getenv("DB_PORT", "3306")
         user = getenv("DB_USER", "root")
         password = getenv("DB_PASSWORD", )
-        database = getenv("DB_NAME", "pc2")
-    elif platform.system() == "Linux":
-        host = getenv("DB_HOST", "db")
-        port = getenv("DB_PORT", "3306")
-        user = getenv("DB_USER", "root")
-        password = getenv("DB_PASSWORD", "uem.ua2c19789!")
-        database = getenv("DB_NAME", "pc2")
-    else:
-        host = getenv("DB_HOST", "localhost")
-        port = getenv("DB_PORT", "3306")
-        user = getenv("DB_USER", "root")
-        password = getenv("DB_PASSWORD", "uem.ua2c19789!")
         database = getenv("DB_NAME", "pc2")
     conn, connection = False, None
     while not conn:
@@ -1412,6 +1434,7 @@ def create_database_connection():
         return None
 
 
+@deprecated(action = "ignore")
 def get_all_attributes_for_points_predicction():
     mariadb = create_database_connection()
     cursor = mariadb.cursor()
@@ -1515,6 +1538,7 @@ def get_all_attributes_for_points_predicction():
             mariadb.close()
 
 
+@deprecated(action = "ignore")
 def database_insert_prediction(players_id, gameweek, point_predictions):
     mariadb = create_database_connection()
     cursor = mariadb.cursor()
@@ -1537,11 +1561,6 @@ def database_insert_prediction(players_id, gameweek, point_predictions):
         cursor.close()
         mariadb.close()
     pass
-
-
-def close_database_connection(conn):
-    if conn is not None:
-        conn.close()
 
 
 if any(platform.system() == ext for ext in ["Linux", "Windows"]):

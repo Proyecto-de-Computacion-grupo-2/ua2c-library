@@ -6,7 +6,7 @@ setup(
     packages = find_packages(),
     install_requires = ["beautifulsoup4", "deprecated", "matplotlib", "mysql-connector-python", "numpy", "pandas",
                         "Pillow", "python-telegram-bot","requests", "scikit-learn", "selenium", "statsmodels",
-                        "tensorflow", "tf-keras", "transformers", "tqdm"
+                        "tensorflow==2.16.1", "tf-keras", "transformers", "tqdm"
         ],
     package_data = {"UA2C": ["fonts/DejaVuSerifCondensed-Italic.ttf"]},
     author = "Lekker",
