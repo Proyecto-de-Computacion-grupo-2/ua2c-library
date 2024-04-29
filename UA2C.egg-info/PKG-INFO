@@ -4,3 +4,19 @@ Version: 0.8
 Summary: General use functions used in UA2C project.
 Author: Lekker
 Author-email: NoneType@NotCallable.com
+Requires-Dist: beautifulsoup4
+Requires-Dist: deprecated
+Requires-Dist: matplotlib
+Requires-Dist: mysql-connector-python
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: Pillow
+Requires-Dist: python-telegram-bot
+Requires-Dist: requests
+Requires-Dist: scikit-learn
+Requires-Dist: selenium
+Requires-Dist: statsmodels
+Requires-Dist: tensorflow==2.16.1
+Requires-Dist: tf-keras
+Requires-Dist: transformers
+Requires-Dist: tqdm

@@ -37,7 +37,7 @@ from telegram.ext import Application, ApplicationBuilder, CallbackContext, Comma
 from time import sleep
 from tqdm import tqdm
 from transformers import TFBertModel, BertTokenizer
-
+from datetime import date
 
 class BearerAuth(requests.auth.AuthBase):
     def __init__(self, token):
