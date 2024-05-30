@@ -5,6 +5,7 @@ mysql-connector-python
 numpy
 pandas
 Pillow
+pycryptodome
 python-telegram-bot
 requests
 scikit-learn

@@ -9,12 +9,14 @@
 import UA2C.routes as route
 
 import base64, csv, itertools, json, logging, matplotlib.pyplot as plt, mysql.connector, numpy, pandas, platform, \
-    re, requests, shutil, tensorflow, threading, warnings
+       re, requests, shutil, tensorflow, threading, warnings
 
 from bs4 import BeautifulSoup
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from datetime import datetime, timedelta, timezone
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
+from datetime import date, datetime, timedelta, timezone
 from deprecated import deprecated
 from math import sqrt
 from matplotlib import ticker
@@ -37,7 +39,6 @@ from telegram.ext import Application, ApplicationBuilder, CallbackContext, Comma
 from time import sleep
 from tqdm import tqdm
 from transformers import TFBertModel, BertTokenizer
-from datetime import date
 
 
 class BearerAuth(requests.auth.AuthBase):
@@ -258,7 +259,7 @@ class Users(Finder):
     class User(Base):
         def __init__(self, id_user: int, email = "", password = "", team_name = "", team_points = 0, team_average = 0.0,
                      team_value = 0, team_players = 0, current_balance = 0, future_balance = 0, maximum_debt = 0,
-                     active = False):
+                     active = False, admin = False):
             self.id_user = id_user
             self.email = email
             self.password = password
@@ -271,15 +272,16 @@ class Users(Finder):
             self.future_balance = future_balance
             self.maximum_debt = maximum_debt
             self.active = active
+            self.admin = admin
 
         def to_insert_statements(self):
             return self.to_insert_statement("league_user")
 
-    def fill_from_database(self):
+    def fill_from_database(self, local_ddbb: bool):
         connection = None
         cursor = None
         try:
-            connection = create_database_connection()
+            connection = create_database_connection(local_ddbb)
             if connection.is_connected():
                 cursor = connection.cursor()
                 query = "SELECT * FROM league_user;"
@@ -288,9 +290,9 @@ class Users(Finder):
                 progress_bar = tqdm(total = len(records), desc = "Filling League User: ")
                 for row in records:
                     (id_user, email, password, team_name, team_points, team_average, team_value, team_players,
-                     current_balance, future_balance, maximum_debt) = row
+                     current_balance, future_balance, maximum_debt, active, admin) = row
                     self.add_user(id_user, email, password, team_name, team_points, team_average, team_value,
-                                  team_players, current_balance, future_balance, maximum_debt, active)
+                                  team_players, current_balance, future_balance, maximum_debt, active, admin)
                     progress_bar.update(1)
                 progress_bar.close()
         except Exception as e:
@@ -302,9 +304,9 @@ class Users(Finder):
 
     def add_user(self, id_user: int, email = "", password = "", team_name = "", team_points = 0, team_average = 0.0,
                  team_value = 0.0, team_players = 0, current_balance = 0, future_balance = 0, maximum_debt = 0,
-                 active = False):
+                 active = False, admin = False):
         user = self.User(id_user, email, password, team_name, team_points, team_average, team_value, team_players,
-                         current_balance, future_balance, maximum_debt, active)
+                         current_balance, future_balance, maximum_debt, active, admin)
         self.users.append(user)
 
     def to_insert_statements(self):
@@ -356,11 +358,11 @@ class Players(Finder):
         def to_insert_statements(self):
             return self.to_insert_statement("player")
 
-    def fill_from_database(self):
+    def fill_from_database(self, local_ddbb: bool):
         connection = None
         cursor = None
         try:
-            connection = create_database_connection()
+            connection = create_database_connection(local_ddbb)
             if connection.is_connected():
                 cursor = connection.cursor()
                 query = "SELECT * FROM player;"
@@ -518,11 +520,11 @@ class Games:
         def to_insert_statements(self):
             return self.to_insert_statement("game")
 
-    def fill_from_database(self):
+    def fill_from_database(self, local_ddbb: bool):
         connection = None
         cursor = None
         try:
-            connection = create_database_connection()
+            connection = create_database_connection(local_ddbb)
             if connection.is_connected():
                 cursor = connection.cursor()
                 query = "SELECT * FROM game;"
@@ -632,11 +634,11 @@ class Absences:
         def to_insert_statements(self):
             return self.to_insert_statement("absence")
 
-    def fill_from_database(self):
+    def fill_from_database(self, local_ddbb: bool):
         connection = None
         cursor = None
         try:
-            connection = create_database_connection()
+            connection = create_database_connection(local_ddbb)
             if connection.is_connected():
                 cursor = connection.cursor()
                 query = "SELECT * FROM absence;"
@@ -685,11 +687,11 @@ class PriceVariations:
         def to_insert_statements(self):
             return self.to_insert_statement("price_variation")
 
-    def fill_from_database(self):
+    def fill_from_database(self, local_ddbb: bool):
         connection = None
         cursor = None
         try:
-            connection = create_database_connection()
+            connection = create_database_connection(local_ddbb)
             if connection.is_connected():
                 cursor = connection.cursor()
                 query = "SELECT * FROM price_variation;"
@@ -729,22 +731,20 @@ class PredictionPoints:
         return self.prediction_points[index]
 
     class PredictionPoint(Base):
-        def __init__(self, id_mundo_deportivo: int, gameweek: int, point_prediction: int, price_prediction: int,
-                     date_prediction: datetime):
+        def __init__(self, id_mundo_deportivo: int, gameweek: int, date_prediction: datetime, point_prediction: int):
             self.id_mundo_deportivo = id_mundo_deportivo
             self.gameweek = gameweek
-            self.date_prediction = date_prediction
             self.point_prediction = point_prediction
-            self.price_prediction = price_prediction
+            self.date_prediction = date_prediction
 
         def to_insert_statements(self):
             return self.to_insert_statement("prediction_points")
 
-    def fill_from_database(self):
+    def fill_from_database(self, local_ddbb: bool):
         connection = None
         cursor = None
         try:
-            connection = create_database_connection()
+            connection = create_database_connection(local_ddbb)
             if connection.is_connected():
                 cursor = connection.cursor()
                 query = "SELECT * FROM prediction_points;"
@@ -753,9 +753,8 @@ class PredictionPoints:
                 progress_bar = tqdm(total = len(records), desc = "Filling Prediction Points: ")
                 for row in records:
                     row = row[1:]
-                    (id_mundo_deportivo, gameweek, point_prediction, price_prediction, date_prediction) = row
-                    self.add_prediction(id_mundo_deportivo, gameweek, point_prediction, price_prediction,
-                                        date_prediction)
+                    (id_mundo_deportivo, gameweek, date_prediction, point_prediction) = row
+                    self.add_prediction(id_mundo_deportivo, gameweek, date_prediction, point_prediction)
                     progress_bar.update(1)
                 progress_bar.close()
         except Exception as e:
@@ -765,10 +764,8 @@ class PredictionPoints:
                 cursor.close()
                 connection.close()
 
-    def add_prediction(self, id_mundo_deportivo: int, gameweek: int, point_prediction: int, price_prediction: int,
-                       date_prediction: datetime):
-        prediction_point = self.PredictionPoint(id_mundo_deportivo, gameweek, point_prediction, price_prediction,
-                                     date_prediction)
+    def add_prediction(self, id_mundo_deportivo: int, gameweek: int, date_prediction: datetime, point_prediction: int):
+        prediction_point = self.PredictionPoint(id_mundo_deportivo, gameweek, date_prediction, point_prediction)
         self.prediction_points.append(prediction_point)
 
     def to_insert_statements(self):
@@ -802,11 +799,11 @@ class UserRecommendations:
         def to_insert_statements(self):
             return self.to_insert_statement("user_recommendation")
 
-    def fill_from_database(self):
+    def fill_from_database(self, local_ddbb: bool):
         connection = None
         cursor = None
         try:
-            connection = create_database_connection()
+            connection = create_database_connection(local_ddbb)
             if connection.is_connected():
                 cursor = connection.cursor()
                 query = "SELECT * FROM user_recommendation"
@@ -853,7 +850,7 @@ class GlobalRecommendations:
         return self.global_recommendations[index]
 
     class GlobalRecommendation(Base):
-        def __init__(self, id_mundo_deportivo: int, lineup:int, gameweek: int):
+        def __init__(self, id_mundo_deportivo: int, lineup: int, gameweek: int):
             self.id_mundo_deportivo = id_mundo_deportivo
             self.lineup = lineup
             self.gameweek = gameweek
@@ -861,11 +858,11 @@ class GlobalRecommendations:
         def to_insert_statements(self):
             return self.to_insert_statement("global_recommendation")
 
-    def fill_from_database(self):
+    def fill_from_database(self, local_ddbb: bool):
         connection = None
         cursor = None
         try:
-            connection = create_database_connection()
+            connection = create_database_connection(local_ddbb)
             if connection.is_connected():
                 cursor = connection.cursor()
                 query = "SELECT * FROM global_recommendation;"
@@ -885,7 +882,7 @@ class GlobalRecommendations:
                 cursor.close()
                 connection.close()
 
-    def add_recommendation(self, id_mundo_deportivo: int, lineup:int, gameweek: int):
+    def add_recommendation(self, id_mundo_deportivo: int, lineup: int, gameweek: int):
         user_recommendation = self.GlobalRecommendation(id_mundo_deportivo, lineup, gameweek)
         self.global_recommendations.append(user_recommendation)
 
@@ -997,6 +994,105 @@ def define_logger(file):
     except Exception as err:
         logg.exception(err)
         return logg
+
+
+def _load_private_key():
+    with open(route.prk, "rb") as key_file:
+        private_key = RSA.import_key(key_file.read())
+    return private_key
+
+
+def decrypt_pgp(encodedb64: str):
+    decoded_message = base64.b64decode(encodedb64)
+    prk = _load_private_key()
+    cipher = PKCS1_OAEP.new(prk)
+
+    # Desencriptar el mensaje
+    try:
+        decrypted_message = cipher.decrypt(decoded_message)
+        return decrypted_message
+    except ValueError as e:
+        raise ValueError(f"Error al descifrar el mensaje: {e}")
+
+
+def extract_login_token(h: dict, u: str, p: str):
+    # Definir la URL del endpoint de inicio de sesión
+    login_url = "https://mister.mundodeportivo.com/api2/auth/email"
+
+    # Definir la carga útil (payload) con las credenciales
+    payload = {"email": u, "password": p}
+
+    failed = True
+    res = None
+
+    while failed:
+        try:
+            # Realizar la solicitud POST para autenticarse
+            response = requests.post(login_url, json = payload, headers = h)
+
+            # Verificar si la autenticación fue exitosa
+            if response.status_code == 200:
+                # Obtener el token de sesión de la respuesta
+                response = response.json()
+                res = response["token"]
+                failed = False
+            else:
+                # Manejar respuestas de error del servidor
+                print(f"Error de autenticación: {response.status_code}")
+        except requests.exceptions.ConnectionError as e:
+            # Manejar errores de conexión
+            print(f"Error de conexión: {e}")
+        except Exception as e:
+            # Manejar cualquier otro error
+            print(f"Error: {e}")
+    return res
+
+
+def extract_tokens(h: dict, u: str, p: str):
+
+    token = extract_login_token(h, u, p)
+
+    # Realizamos la segunda solicitud para verificar que el token sea válido
+    url = "https://mister.mundodeportivo.com/api2/auth/external/exchange-token"
+    payload = {"token": token}
+    response = requests.post(url, json = payload, headers = h)
+    if response.status_code == 200:
+        cookie_list = []
+        for _ in response.cookies.items():
+            cookie_list.append(_[0] + "=" + _[1])
+        return "; ".join(cookie_list[1:])
+
+
+def extract_auth(h: dict, ua: str, u: str, p: str):
+    full_cookie = extract_tokens(h, u, p)
+
+    auth_headers = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,"
+                              "*/*;q=0.8", "Accept-Encoding": "gzip, deflate", "Accept-Language":
+                    "es-ES,es;q=0.9", "User-Agent": ua, "Cookie": full_cookie, "X-Requested-With": "XMLHttpRequest",
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"}
+
+    market_url = "https://mister.mundodeportivo.com/market"
+
+    response = requests.get(market_url, headers = auth_headers)
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    script = soup.find("script")
+
+    regex_expresion = '"auth":"[a-zA-Z0-9]+"'
+    match = re.search(regex_expresion, script.get_text())
+
+    auth_headers["X-AUTH"] = match.group().split(":")[1].replace("\"", "")
+
+    return auth_headers
+
+
+def extract_balance(h: dict, url: str):
+    response = requests.post(url, data = {}, headers = h)
+    if response.status_code == 200:
+        return {"current_balance": response.json()["data"]["balance"],
+                "future_balance": response.json()["data"]["future"],
+                "maximum_debt": response.json()["data"]["max_debt"]}
+    return None
 
 
 def automated_commit(who: str):
@@ -1397,7 +1493,7 @@ def scrape_backup(folder, backup):
 
 
 # Database
-def create_database_connection():
+def create_database_connection(local: bool):
     with open(route.env_file, "r", encoding = "utf-8") as f:
         data = json.load(f)
     host = data["DB_HOST"]
@@ -1405,12 +1501,13 @@ def create_database_connection():
     user = data["DB_USERNAME"]
     password = data["DB_PASSWORD"]
     database = data["DB_DATABASE"]
-    if platform.system() == "Windows":
-        host = getenv("DB_HOST", "127.0.0.1")
-        port = getenv("DB_PORT", "3306")
-        user = getenv("DB_USER", "root")
-        password = getenv("DB_PASSWORD", )
-        database = getenv("DB_NAME", "pc2")
+    if local:
+        if platform.system() == "Windows":
+            host = getenv("DB_HOST", "127.0.0.1")
+            port = getenv("DB_PORT", "3306")
+            user = getenv("DB_USER", "root")
+            password = getenv("DB_PASSWORD", )
+            database = getenv("DB_NAME", "pc2")
     conn, connection = False, None
     while not conn:
         try:

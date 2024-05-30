@@ -14,15 +14,19 @@ TOKEN = "6586916577:AAEskwTGX0vjQBZVOCtrfOAg_gQiG9nFcJ8"
 
 if any(ext in getcwd() for ext in ["application", "bot", "src", "Functions", "img", "Layouts", "models", "scrape",
                                    "temp_folder", "users", "PC2_Utils"]):
-    root_folder = path.abspath(path.join(getcwd(), "../.."))
+    root_folder = path.abspath(path.join(getcwd(), ".."))
 else:
     root_folder = getcwd()
 bot_folder = path.join(root_folder, "bot")
 image_folder = path.join(root_folder, "img")
+keys_folder = path.join(root_folder, "keys")
 models_folder = path.join(root_folder, "models")
 scrape_folder = path.join(root_folder, "scrape")
 temp_folder = path.join(root_folder, "temp_folder")
 utils_folder = path.join(root_folder, "")
+
+# Keys folder.
+prk = path.join(keys_folder, "private_key_16184.pem")
 
 # Scrape folders.
 data_folder = path.join(scrape_folder, "data")
